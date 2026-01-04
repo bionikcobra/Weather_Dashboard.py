@@ -111,7 +111,7 @@ def draw_dashboard(current, forecast):
               desc, font=font_desc, fill=0)
 
     # Icon to the right
-    image.paste(icon_img, (epd.width - 64 - 20, 120))
+    image.paste(icon_img, (epd.width - 250 - 20, 120))
 
     # ---------------------------
     # 5-DAY FORECAST (BOTTOM HALF)
