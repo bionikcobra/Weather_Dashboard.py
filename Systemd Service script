@@ -1,0 +1,8 @@
+[Unit]
+Description=Weather Dashboard Update
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+ExecStart=/usr/bin/python3 /home/pi/weather_dashboard.py
