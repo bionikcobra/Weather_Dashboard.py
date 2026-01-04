@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+import requests
+from PIL import Image, ImageDraw, ImageFont
+from waveshare_epd import epd7in5_V2
+import time
+import datetime
+import os
+import sys
+
+# --------------------------
+# CONFIGURATION
+# --------------------------
+API_KEY = "20a7b76232194ec69e07009f962e715f"
+CITY_ID = 4276873  # Overland Park, KS
+UNITS = "imperial"
+
+ICON_DIR = "/home/pi/icons"   # folder where your PNG icons are stored
+
+# Mapping OpenWeather icon codes → your pixel icons
+ICON_MAP = {
+    "01d": "sun.png", "01n": "sun.png",
+    "02d": "cloud.png", "02n": "cloud.png",
+    "03d": "cloud.png", "03n": "cloud.png",
+    "04d": "cloud.png", "04n": "cloud.png",
+    "09d": "rain.png", "09n": "rain.png",
+    "10d": "rain.png", "10n": "rain.png",
+    "11d": "storm.png", "11n": "storm.png",
+    "13d": "snow.png", "13n": "snow.png",
+    "50d": "fog.png", "50n": "fog.png",
+}
+
+# --------------------------
+# API FUNCTIONS
+# --------------------------
+def get_current_weather():
+    url = f"https://api.openweathermap.org/data/2.5/weather?id={CITY_ID}&units={UNITS}&appid={API_KEY}"
+    r = requests.get(url, timeout=10)
+    return r.json()
+
+def get_forecast():
+    url = f"https://api.openweathermap.org/data/2.5/forecast?id={CITY_ID}&units={UNITS}&appid={API_KEY}"
+    r = requests.get(url, timeout=10)
+    data = r.json()
+
+    days = {}
+    for entry in data["list"]:
+        date = entry["dt_txt"].split(" ")[0]
+        time_part = entry["dt_txt"].split(" ")[1]
+
+        if time_part == "12:00:00" and len(days) < 5:
+            days[date] = entry
+
+    return list(days.values())
+
+
+# --------------------------
+# ICON LOADER
+# --------------------------
+def load_icon(code):
+    filename = ICON_MAP.get(code, "cloud.png")
+    path = os.path.join(ICON_DIR, filename)
+    try:
+        return Image.open(path).convert("1")
+    except:
+        return Image.new("1", (64,64), 1)
+
+
+# --------------------------
+# DASHBOARD DRAW
+# --------------------------
+def draw_dashboard(current, forecast):
+    epd = epd7in5_V2.EPD()
+    epd.init()
+    epd.Clear()
+
+    image = Image.new("1", (epd.width, epd.height), 255)
+    draw = ImageDraw.Draw(image)
+
+    # Fonts
+    font_city = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+    font_date = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
+    font_temp = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64)
+    font_desc = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
+    font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
+
+    # ---------------------------
+    # CURRENT WEATHER (TOP HALF)
+    # ---------------------------
+    city = current["name"]
+    temp = round(current["main"]["temp"])
+    desc = current["weather"][0]["description"].title()
+    icon_code = current["weather"][0]["icon"]
+    icon_img = load_icon(icon_code)
+
+    # Centered City Name
+    draw.text((epd.width//2 - draw.textlength(city, font_city)//2, 10),
+              city, font=font_city, fill=0)
+
+    # Current Date
+    today_str = datetime.datetime.now().strftime("%a • %b %d")
+    draw.text((epd.width//2 - draw.textlength(today_str, font_date)//2, 75),
+              today_str, font=font_date, fill=0)
+
+    # Temperature centered
+    temp_str = f"{temp}°F"
+    draw.text((epd.width//2 - draw.textlength(temp_str, font_temp)//2, 120),
+              temp_str, font=font_temp, fill=0)
+
+    # Weather description
+    draw.text((epd.width//2 - draw.textlength(desc, font_desc)//2, 200),
+              desc, font=font_desc, fill=0)
+
+    # Icon to the right
+    image.paste(icon_img, (epd.width - 64 - 20, 120))
+
+    # ---------------------------
+    # 5-DAY FORECAST (BOTTOM HALF)
+    # ---------------------------
+    y = 280
+    spacing = epd.width // 5
+
+    for i, day in enumerate(forecast):
+        date = day["dt_txt"].split(" ")[0]
+        dt = datetime.datetime.strptime(date, "%Y-%m-%d")
+        weekday = dt.strftime("%a")
+        date_short = dt.strftime("%b %d")
+
+        ft = round(day["main"]["temp"])
+        ic = day["weather"][0]["icon"]
+        ic_img = load_icon(ic)
+
+        x = i * spacing + spacing//2 - 32
+
+        # Weekday
+        draw.text((x, y), weekday, font=font_small, fill=0)
+
+        # Date
+        draw.text((x, y + 25), date_short, font=font_small, fill=0)
+
+        # Icon
+        image.paste(ic_img, (x, y + 50))
+
+        # Temp
+        draw.text((x, y + 120), f"{ft}°", font=font_small, fill=0)
+
+    # Render to display
+    epd.display(epd.getbuffer(image))
+    epd.sleep()
+
+
+# --------------------------
+# MAIN
+# --------------------------
+def main():
+    try:
+        current = get_current_weather()
+        forecast = get_forecast()
+        draw_dashboard(current, forecast)
+    except KeyboardInterrupt:
+        sys.exit()
+
+
+if __name__ == "__main__":
+    main()
