@@ -141,7 +141,7 @@ def draw_dashboard(current, forecast):
         image.paste(ic_img, (x, y + 50))
 
         # Temp
-        draw.text((x, y + 120), f"{ft}°", font=font_small, fill=0)
+        draw.text((x, y + 145), f"{ft}°", font=font_small, fill=0)
 
     # Render to display
     epd.display(epd.getbuffer(image))
